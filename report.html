@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">
+<title>UNCX Vesting V2 exploit, 14 October 2026: attacker contracts, drain, held ETH</title>
+<meta name="description" content="UNCX Vesting V2 exploit on Ethereum, 14 Oct 2026: four attacker addresses, five tokens drained, 21.45 ETH back to the signing wallet, 20.24 ETH held. Balances read 18 Oct 2026.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@300;400;600;800&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+:root{
+  color-scheme:light dark;
+  --bg:light-dark(#ffffff,#0a0a0a);--ink:light-dark(#1c1c1c,#d0d0d0);--hi:light-dark(#000000,#f5f5f5);
+  --mut:light-dark(#555555,#8c8c8c);--faint:light-dark(#6b6b6b,#6a6a6a);--line:light-dark(#8f8f8f,#3d3d3d);
+  --rule:light-dark(#d9d9d9,#2a2a2a);--panel:light-dark(#f3f3f3,#121212);--sig:light-dark(#000000,#f5f5f5);
+  --sigtx:light-dark(#ffffff,#0a0a0a);
+}
+:root[data-theme="light"]{color-scheme:light}
+:root[data-theme="dark"]{color-scheme:dark}
+@supports not (color:light-dark(#000,#fff)){
+  :root{--bg:#0a0a0a;--ink:#d0d0d0;--hi:#f5f5f5;--mut:#8c8c8c;--faint:#6a6a6a;--line:#3d3d3d;--rule:#2a2a2a;--panel:#121212;--sig:#f5f5f5;--sigtx:#0a0a0a}
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+a{color:var(--ink)}a:hover{color:var(--hi)}
+.page{max-width:980px;margin:0 auto;padding:16px}
+.sheet{position:relative;border:1px solid var(--line);padding:44px 52px 40px}
+.sheet::before,.sheet::after{content:"";position:absolute;left:0;right:0;height:7px;pointer-events:none;
+  background:repeating-linear-gradient(to right,transparent 0,transparent calc(12.5% - 1px),var(--line) calc(12.5% - 1px),var(--line) 12.5%)}
+.sheet::before{top:0}.sheet::after{bottom:0}
+.bar{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;color:var(--mut)}
+.bar b{color:var(--ink);font-weight:400}
+.bar button{font:inherit;color:var(--mut);background:none;border:1px solid var(--line);padding:2px 8px;cursor:pointer;min-height:28px}
+.bar button:hover{color:var(--hi);border-color:var(--mut)}
+.kick{margin-top:26px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;letter-spacing:.18em;font-size:12px}
+.kick .blk{width:10px;height:18px;background:var(--hi);flex:none}
+.kick .k1{color:var(--hi)}
+.kick .k2{color:var(--mut);letter-spacing:.1em}
+.chip{background:var(--sig);color:var(--sigtx);padding:0 6px}
+h1{margin:16px 0 0;font-family:'Martian Mono','IBM Plex Mono',monospace;font-weight:800;font-size:clamp(20px,3.6vw,31px);
+  line-height:1.16;letter-spacing:-.02em;color:var(--hi);text-wrap:balance}
+.legend{margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;color:var(--mut)}
+.cf{white-space:nowrap}.cf i{display:inline-block;width:20px;height:0;border-top:1.5px solid currentColor;vertical-align:middle;margin-right:6px;position:relative;top:-1px}
+.cf.m i{border-top-style:dashed}.cf.l i{border-top:2px dotted currentColor}
+.legend .cf{margin-right:10px}
+.nav{margin-top:22px;display:flex;flex-wrap:wrap;gap:6px 22px;color:var(--mut);font-size:12px}
+.nav a{color:var(--mut);text-decoration:none;border-bottom:1px solid var(--rule)}
+.nav a:hover{color:var(--hi);border-color:var(--mut)}
+.nav a span{color:var(--ink)}
+.div{margin-top:40px;display:flex;align-items:center;gap:10px;color:var(--mut)}
+.div span:first-child,.div span:last-child{color:var(--ink)}
+.div i{flex:1;border-top:1px dashed var(--line);height:0}.div b{width:48px;border-top:1px dashed var(--line);height:0}
+h2{margin:30px 0 0;font-family:'Martian Mono','IBM Plex Mono',monospace;font-weight:600;font-size:clamp(16px,2.6vw,21px);
+  line-height:1.25;color:var(--hi);padding-top:14px;border-top:1px solid var(--line);scroll-margin-top:12px}
+h2 .no{color:var(--mut)}h2 .sep{margin:0 .5em;color:var(--mut)}
+.div + h2{border-top:0;padding-top:0;margin-top:16px}
+.strip{margin-top:18px;border:1px solid var(--line);background:var(--panel);padding:12px 16px 4px}
+.strip .cap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--mut);letter-spacing:.08em}
+.strip .ch2{color:var(--hi)}
+.strip .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0 22px}
+.st{padding:12px 0 12px;border-top:1px solid var(--rule);margin-top:10px}
+.strip .grid .st:nth-child(-n+4){border-top:0;margin-top:6px}
+.st .v{font-family:'Martian Mono','IBM Plex Mono',monospace;font-weight:600;font-size:clamp(15px,2.2vw,19px);color:var(--hi);line-height:1.2;white-space:nowrap}
+.st .l{margin-top:4px;color:var(--mut);font-size:12px;line-height:1.4;overflow-wrap:break-word}
+.snap{margin-top:18px;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14.5px;line-height:1.6;color:var(--ink)}
+.snap .chip{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;padding:2px 8px;display:inline-block;margin-bottom:6px}
+.note{margin-top:0;padding:12px 0;border-top:1px solid var(--rule);display:grid;grid-template-columns:150px minmax(0,1fr);gap:8px 20px}
+.note:last-of-type{border-bottom:1px solid var(--rule)}
+.lab{color:var(--hi);font-weight:600}
+.txt{font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14.5px;line-height:1.6;color:var(--ink)}
+.snap + .note{margin-top:14px}
+.para{font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14.5px;line-height:1.6;margin:14px 0 0}
+.rows{list-style:none;margin:12px 0 0;padding:0}
+.rows>li{position:relative;padding:11px 0 11px 20px;border-top:1px solid var(--rule)}
+.rows>li:last-child{border-bottom:1px solid var(--rule)}
+.rows>li::before{content:"";position:absolute;left:0;top:21px;width:10px;height:0;border-top:1.5px solid var(--mut)}
+.lead,.trail{font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14.5px;line-height:1.6;color:var(--ink)}
+.trail{margin-top:8px}
+strong{color:var(--hi);font-weight:600}
+code{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12.5px;color:var(--hi);overflow-wrap:anywhere;word-break:break-all}
+a.ad,a.tx{text-decoration:underline dotted;text-decoration-color:var(--mut);text-underline-offset:3px}
+a.ad:hover,a.tx:hover{text-decoration-style:solid;text-decoration-color:var(--hi)}
+@media (min-width:641px){a.ad,a.tx{display:inline-block;max-width:100%;vertical-align:bottom}}
+a.u{text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--mut)}
+a.u:hover{text-decoration-color:var(--hi)}
+a.mono{font-family:'IBM Plex Mono',monospace;font-size:12.5px;word-break:break-all}
+em.cn{font-style:normal;color:var(--mut)}
+em.cn .cf{color:var(--ink)}
+.tw{margin-top:14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tw.sub{margin-top:10px}
+.t{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.t th{color:var(--mut);font-weight:400;text-align:left;padding:6px 10px 6px 0;border-bottom:1px solid var(--ink);white-space:nowrap}
+.t td{padding:6px 10px 6px 0;border-bottom:1px solid var(--rule);white-space:nowrap;color:var(--ink)}
+.t td:first-child{color:var(--hi)}
+.t th+th,.t td+td{padding-left:22px}
+.t .n{text-align:right}
+.t.compact{max-width:600px}
+.t.compact td:first-child{white-space:normal}
+.t.compact code{font-size:12px}
+.dep{margin-top:14px;border:1px solid var(--line);padding:10px 14px 6px}
+.dh{display:flex;flex-wrap:wrap;gap:4px 18px;padding-bottom:8px;border-bottom:1px solid var(--rule);align-items:baseline}
+.dh .tm{color:var(--hi)}.dh .ch{color:var(--mut);letter-spacing:.08em;text-transform:uppercase}.dh .am{margin-left:auto;color:var(--hi);font-weight:600}
+.kv{display:grid;grid-template-columns:150px minmax(0,1fr);gap:4px 14px;padding:7px 0;border-top:1px solid var(--rule)}
+.dh + .kv{border-top:0}
+.kv .k{color:var(--mut)}.kv .v{min-width:0}
+.foot{margin-top:40px;display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap}
+.foot .by{font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:12.5px;line-height:1.5;color:var(--mut);max-width:420px}
+.stamp{flex:0 0 300px;border:1px solid var(--line);background:var(--bg);font-size:12px}
+.stamp div{display:flex;justify-content:space-between;gap:12px;padding:5px 10px;border-top:1px solid var(--line)}
+.stamp div:first-child{border-top:1px solid transparent}
+.stamp div:first-child span:first-child{color:var(--ink);font-weight:600}
+.stamp span:first-child{color:var(--mut)}.stamp span:last-child{color:var(--ink);text-align:right}
+@media (max-width:860px){.strip .grid{grid-template-columns:repeat(2,minmax(0,1fr))}.strip .grid .st:nth-child(-n+4){border-top:1px solid var(--rule);margin-top:10px}.strip .grid .st:nth-child(-n+2){border-top:0;margin-top:6px}}
+@media (max-width:640px){
+  .sheet{padding:34px 16px 30px}
+  .note{grid-template-columns:minmax(0,1fr)}
+  .kv{grid-template-columns:minmax(0,1fr);gap:2px}
+  .stamp{flex-basis:100%}
+  .dh .am{margin-left:0}
+  .st .v{font-size:14px}
+}
+@media print{
+  :root,:root[data-theme]{color-scheme:light}
+  .bar button{display:none}.sheet{border-color:#8f8f8f}.dep,.rows>li{break-inside:avoid}
+}
+
+ul{font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14.5px;line-height:1.6;padding-left:20px;margin:12px 0}
+li{margin:6px 0}p.txt{margin:12px 0}code{font-size:11.5px}
+table{border-collapse:collapse;margin:12px 0;width:100%}th,td{border:1px solid var(--line);padding:6px 10px;text-align:left}th{color:var(--hi)}
+.stat{display:flex;gap:28px;flex-wrap:wrap;margin-top:18px}.stat div{border-top:1px solid var(--line);padding-top:8px}.stat b{display:block;font-family:'Martian Mono',monospace;font-size:19px;color:var(--hi)}
+</style></head>
+<body><div class="page"><div class="sheet">
+<div class="bar"><span><b>fish</b> &mdash; ~/cases/2026-10-14-uncx-vesting-v2 &middot; forensics</span><span>sheet 01</span></div>
+<div class="kick"><span class="blk"></span><span class="k1">INVESTIGATION REPORT</span><span class="chip">UNCX</span><span class="k2">uncx-vesting-v2 &middot; 14 Oct 2026</span></div>
+<h1>UNCX Vesting V2 exploit on Ethereum: <span class="chip">20.24 ETH</span> held by the attacker wallet at 18:14 UTC on 18 Oct</h1>
+<div class="stat"><div><b>5</b>tokens drained</div><div><b>4</b>attacker addresses</div><div><b>21.45 ETH</b>ETH back to the signing wallet</div><div><b>20.24 ETH</b>held, read 18 Oct 18:14 UTC</div></div>
+<div class="legend"><span class="cf h"><i></i>High</span><span class="cf m"><i></i>Medium</span><span class="cf l"><i></i>Low</span><span>Files: attacker_addresses.csv &middot; hops.csv &middot; drain_txs.csv</span></div>
+<div class="nav"><a href="#s0"><span>BLUF</span></a><a href="#s1"><span>1. The drain</span></a><a href="#s2"><span>2. Where the tokens went</span></a><a href="#s3"><span>3. ETH proceeds and the balance</span></a><a href="#s4"><span>4. The funder</span></a><a href="#s5"><span>5. Bounty terms and statements</span></a><a href="#s6"><span>6. Other chains</span></a><a href="#s7"><span>7. Open items</span></a><a href="#s8"><span>8. Method and confidence</span></a></div>
+<p class="txt"><b>Author:</b> Phil Grushyn (<a href="https://linkedin.com/in/philgr">LinkedIn</a>)</p>
+<p class="txt">All times UTC. On-chain facts were read from public Ethereum data on 18 Oct 2026 between 17:58 and 18:14 UTC; balances are as of that read. This report covers Ethereum. Other chains are summarised in section 6 and are only partly read.</p>
+<div class="div"><span>A</span><i></i><span>section BLUF</span><i></i><b></b><span>A</span></div>
+<h2 id="s0">BLUF</h2>
+<ul><li>The first drain is transaction <code>0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d</code>, 14 Oct 2026 15:49:59 UTC, block 26191745 (High). The wallet <code>0x78c9b11853e4f183a34c63ffd1924d2319a2f5b3</code> signed it and sent it to its own contract <code>0x6cebdf095172b355121b93962017975c4601f26c</code>. That contract created the exploit contract <code>0xf6d072254eb8a9b06e0ba21221b498332c1bc35e</code> in the same transaction and pulled five tokens out of the UNCX Smart Token Vesting contract <code>0xa98f06312b7614523d0f5e725e15fd20fb1b99f5</code>.</li><li>Net tokens that left the vesting contract in that transaction (out minus returned, from the Transfer logs): PAAL 115,945.63; LO0P 65,826.0; PEPECOIN 42,200.53; ZC 9,131,678.04; EDGEN 57,344,850.92 (High).</li><li>The attacker list is four addresses (High): the signing wallet, its deployed contract, the exploit contract and the funder below. <code>attacker_addresses.csv</code> holds them with the transaction hashes behind each.</li><li>The tokens were sold through swap routers and pools between 14 Oct 16:44 and 15 Oct 07:35. Six ETH inflows to the signing wallet sum to 21.45 ETH (High).</li><li>The signing wallet held 20.24 ETH at 18:14 UTC on 18 Oct (High, balance read). No ETH transfer from it to an exchange or bridge was found in the traced window.</li><li>A separate wallet, <code>0x6d2afff4fc6ff46564467762c4aa35812680d606</code>, funded the signing wallet with 0.1, 0.9 and 2.5 ETH before the drain and took 3.5 ETH back at 17:09 UTC. Its own ETH came from a Tornado Cash 10 ETH pool withdrawal on 2025-11-15. It is attacker-held and listed as the attacker funder (High). Who operates it is not established. It held 7.46 ETH at the read.</li><li>The trace is partial; the open items are in section 7.</li></ul>
+<div class="div"><span>A</span><i></i><span>section 1. The drain (High)</span><i></i><b></b><span>A</span></div>
+<h2 id="s1">1. The drain (High)</h2>
+<p class="txt">Wallet <code>0x78c9b1…</code> (the signing wallet) created the contract <code>0x6cebdf…</code> in its first transaction, <code>0x477c8060aa22478b436d6120ffe5954775cb02974acd09d7c52ae1500b73d4d9</code>, at 14:50:11 UTC. At 15:49:59 UTC it called that contract, which created <code>0xf6d072…</code> inside the transaction and drew the five tokens out of the vesting contract. The exploit contract received 99 % or more of the gross outflow of each token, the rest went to a fee-share recipient. A block builder (Quasar Builder) took a 0.01 ETH tip in that transaction; it is a terminal.</p>
+<p class="txt">Press describes the mechanism as an accounting flaw in the vesting manager's release function. I did not verify that independently (Medium).</p>
+<p class="txt">Four more attempts by the signing wallet between 15:58 and 16:25 UTC reverted (nonces 2 to 5, calls into its contract).</p>
+<table><tr><th>token</th><th>net out of the vesting contract</th></tr><tr><td>PAAL</td><td>115,945.63</td></tr><tr><td>LO0P</td><td>65,826.0</td></tr><tr><td>PEPECOIN</td><td>42,200.53</td></tr><tr><td>ZC</td><td>9,131,678.04</td></tr><tr><td>EDGEN</td><td>57,344,850.92</td></tr></table>
+<div class="div"><span>A</span><i></i><span>section 2. Where the tokens went (High)</span><i></i><b></b><span>A</span></div>
+<h2 id="s2">2. Where the tokens went (High)</h2>
+<ul><li>14 Oct 16:38 to 16:41 (nonces 6 to 11): the exploit contract sent PAAL 113,657.77, LO0P 65,372.22, PEPECOIN 40,155.28 and EDGEN 55,601,598.7 to the signing wallet.</li><li>15 Oct 07:27: the exploit contract sent ZC 9,055,847.63 to the signing wallet.</li><li>Between 14 Oct 16:44 and 15 Oct 07:35 the signing wallet sold the tokens through the LI.FI Diamond router, a Uniswap V2 pool, a Uniswap V3 pool and an unverified swap contract, with ETH paid back in the same transactions. Inside the drain transaction itself the exploit contract also sent each token to a pool (Uniswap V2, Uniswap v4 pool manager, Uniswap V3, a Jam pair) in amounts larger than the net drained; these are part of the drain mechanism, not sales (Medium, not read in detail). These are terminals: nothing downstream of them is attributed.</li><li>21 transfers in <code>hops.csv</code> return tokens from the exploit contract to the vesting contract inside the first drain transaction, and 10 more pay it 0.05 ETH each (0.5 ETH). They are already netted in the figures above.</li></ul>
+<div class="div"><span>A</span><i></i><span>section 3. ETH proceeds and the balance (High)</span><i></i><b></b><span>A</span></div>
+<h2 id="s3">3. ETH proceeds and the balance (High)</h2>
+<p class="txt">Six ETH inflows to the signing wallet from the swap routers and the exploit contract sum to 21.45 ETH between 14 Oct 16:41 and 15 Oct 07:35. It held 20.24 ETH when read at 18:14 UTC on 18 Oct. Besides gas, ETH left it twice: 0.8 ETH into its own contract in the drain transaction (0.5 ETH of it was paid into the vesting contract, 0.01 ETH went to the block builder, 0.29 ETH came back at 16:41) and 3.5 ETH to the funder.</p>
+<div class="div"><span>A</span><i></i><span>section 4. The funder (attacker-held, High; operator </span><i></i><b></b><span>A</span></div>
+<h2 id="s4">4. The funder (attacker-held, High; operator not established)</h2>
+<p class="txt"><code>0x6d2afff4fc6ff46564467762c4aa35812680d606</code> sent the signing wallet:</p>
+<ul><li>0.1 ETH, 14 Oct 14:47:35, <code>0x52fe1a5aa857a3e6f6f0c12f559019da382c294238601b967a74b03c01c5b93b</code></li><li>0.9 ETH, 14 Oct 14:56:59, <code>0x351b5d9728c51ffbefd951b3536ab9c61e6e0de9dfa738830d560eb82fb6992e</code></li><li>2.5 ETH, 14 Oct 15:15:35, <code>0x56db74daaa13475dbb3360c86bf150ad2430556500cd803e47590f3b32b75e8b</code></li></ul>
+<p class="txt">and received 3.5 ETH back at 17:09:35, <code>0xa32b5eefca3e3dc8891f9e07fcd585c5ce1762f5d67035fc3e61acaa818f92bd</code>. The contract creation at 14:50:11 was paid from this funding. The funder's own ETH came from one withdrawal of 9.959 ETH on 2025-11-15 06:26:35 UTC, <code>0x673d351dc09e25ed89ebcd661a241661af804deba89ccc81839630ba75a17b5f</code>, from the Tornado Cash 10 ETH pool <code>0x910Cbd523D972eb0a6f4cAe4618aD62622b39DbF</code> through the Tornado router. Its only other outflow is 2.5 ETH to a fresh wallet on 22 Sep 2026 (open, section 7). The funder held 7.46 ETH at the read.</p>
+<p class="txt">The wallet is attacker-held (High): it funded the signing wallet before the drain and received 3.5 ETH back, three transactions in and one out. Tornado-sourced funding names no operator, so who operates it is not established. Lookalike-address wallets sent dust to the signing wallet afterwards; they are not linked.</p>
+<div class="div"><span>A</span><i></i><span>section 5. Bounty terms and statements</span><i></i><b></b><span>A</span></div>
+<h3>The funder's one earlier outflow (open lead, Low)</h3>
+<p class="txt">On 22 Sep 2026 13:55:35 UTC the funder (tx.from) sent 2.5 ETH to <code>0xaA9F5b46bf43d08A6242a0b7033983b9B6C2560e</code> (tx.to), <code>0xbc5c4a847daa2ce85fa1ad9ebd793c22bf58a0707f735eb8521724c51a0512f8</code>. That transfer is the wallet's first transaction; it has no public tag or known label. Its sent transactions since then, with the sender as tx.from:</p>
+<ul><li>14:26:23, 0.01 ETH to <code>0x634afF3951DaB537Cc63a4e9d8a36d3028CE819d</code>, <code>0x8a36dbf6ddd26c84e1ed76cdef2750f8aa5c51f81dd013fb00b0c650149cd971</code>; 0.00835 ETH came back at 16:21:59, <code>0x4bcb9bd6e2f96fc78f9d3d0f781aed629b77721d9c52754aa43f4efa1ac2f027</code>.</li><li>14:28:11, 2 ETH to <code>0x7a6D8b5b5CF3773Cb518271e24aee626D9f6FF91</code>, <code>0xfe2298158f6120c66a462753d09eb58d8d9c134fea90775d58a9839596cb1c8d</code>.</li><li>14:33 to 14:43, three contract creations (<code>0xb38e3a6c2769ad487fefd540a2b344cfe18d6e9fb6c9769c43d3a7fd5768b9d2</code>, <code>0xed816039635009de96039a472dbea00cf53ac8e5c641a0ad6e8c787f4ad24586</code>, <code>0x8a6c8a3f57135dc687e83d0baaa5a0430bd6ad7b1f4d4697a2d0724732f371fd</code>), unverified.</li></ul>
+<p class="txt">The 2 ETH recipient is a wallet that first appears in that transfer; it calls a contract with withdraw and remove methods, shows reverted multi-call transactions on 22 Sep and holds 2.25 ETH at the read. In what I read there is no exchange deposit, bridge or mixer (Medium). The 2 ETH recipient's history is only partly read: on 22 Sep between 15:05 and 15:08 UTC it sent four batched transactions (two reverted) with hundreds of internal calls to the unverified contract <code>0xD216153c06E857cD7f72665E0aF1d7D82172F494</code>, received 1.198 ETH from that contract at 15:17:59 in <code>0x7cbc34e4b4d69c02a4417bf410f70e8dafe11faca06555ca01b64ee396199d63</code>, and its transactions between 14:28 and 15:05 UTC are not read. The wallet also received dust and fake-token transfer events from addresses that copy the start and end of other addresses (address poisoning), which is noise, not a link. Nothing here shows the wallet is operated by the attacker or by a named entity (Low). Open: whether the 2 ETH recipient ever deposits to an exchange.</p>
+<h2 id="s5">5. Bounty terms and statements</h2>
+<p class="txt">No official UNCX statement or bounty page was found as of 2026-10-18 17:24 UTC. Press quotes UNCX as coordinating with law enforcement and SEAL 911. Two on-chain messages were sent to the signing wallet:</p>
+<ul><li>15 Oct 10:25:23 UTC, tx <code>0xca87838c3aebb383b0607a74cb0db0794d87125591ace5464b5d019f38d7e16d</code>, from <code>0x9f8118FA93735C7eafbECC455E2D5f5E6D8749F4</code> (5 transactions sent in total, 0.16 ETH). The text says the sender noticed a bug in UNCX Vesting V2, offers a 10 % bounty as a whitehat incident if 18.207 ETH is returned to the multisig <code>0x32f0eB068fD804195629A2CBEE30A7e9CE58c4cb</code> within 48 hours, and gives a recovery e-mail address. The sender is presented as the project side. That is unverified (Low): no official page repeats the offer or the multisig.</li><li>15 Oct 06:40:47 UTC, tx <code>0x3d08bda0a282249b2cd05685962c2d7bc21ec2a23a4da4d2191c7d48123b96ac</code>, from <code>0x7c0b22d3642f335aB0F08C5FD0a38Ff6262D03d7</code> (an unrelated wallet with 412 transactions): 1 wei with a begging text. Not a project statement.</li></ul>
+<div class="div"><span>A</span><i></i><span>section 6. Other chains</span><i></i><b></b><span>A</span></div>
+<h2 id="s6">6. Other chains</h2>
+<ul><li>The drained contract address holds no code on BSC, Base, Robinhood Chain, Optimism, Avalanche or Arbitrum. A deployment at another address is not excluded; UNCX's vesting documentation lists none and none was located.</li><li>Polygon, Arbitrum, Unichain, Optimism, Avalanche: no outbound token transfer after 14 Oct 15:00 on any documented contract, except Polygon legacy: 16 transfers of one token to 9 recipients, not a drain pattern.</li><li>BSC, Base: the newest 50 transfers per documented contract show no drain pattern; the v2 contracts show no token transfers since Aug 2025.</li><li>Robinhood Chain: 162 outbound token transfers in 8 transactions after 14 Oct 15:00, to 5 recipients, none an attacker address. This reads as ordinary releases (Medium); one batch of 146 transfers was not hand-read.</li><li>Arc, Ink, Krown: a vesting contract is documented on each; neither its code nor its transfers were read. Solana was not read.</li><li>Limits: token transfers only, native-coin outflows not read; the drain flag (three or more tokens to one recipient within 10 minutes) is uncalibrated.</li></ul>
+<div class="div"><span>A</span><i></i><span>section 7. Open items</span><i></i><b></b><span>A</span></div>
+<h2 id="s7">7. Open items</h2>
+<ul><li>BSC and Base deployments that press names but UNCX does not document: not located. The documented ones were checked.</li><li>Press-named drains on other chains: not traced.</li><li>Three later drain-pattern transactions the same day, by other senders (token X and ZC): no common signer with the attacker wallets was found (Medium, not linked). Press calls them copycat or MEV bots.</li><li>The press total across 4 chains: unverified here.</li><li>The sender of the bounty message: unverified.</li><li>The funder's operator: unknown.</li><li>The funder's one earlier outflow: 2.5 ETH on 22 Sep 2026 13:55:35 UTC, to a fresh wallet (address and tx in section 4): traced two hops, the second wallet's history only partly read, no exchange, bridge or mixer in what was read, link to the attacker not established (open, section 4).</li><li>The mechanism of the flaw: press description only.</li><li>Bytecode comparison of the three contracts created by the funder's 22 Sep recipient (the fresh wallet) against the attacker contract and the exploit contract (public Ethereum RPC, runtime code, 19 Oct 2026): different. Runtime lengths are 1,330, 4,933 and 4,933 bytes against 3,115 (attacker contract) and 23,739 (exploit contract); keccak256 of the runtime code differs for every pair, also after stripping the 53-byte metadata tail. Two of the three created contracts are identical to each other. No code link to the attacker (Low for any link between the fresh wallet and the attacker).</li></ul>
+<div class="div"><span>A</span><i></i><span>section 8. Method and confidence</span><i></i><b></b><span>A</span></div>
+<h2 id="s8">8. Method and confidence</h2>
+<p class="txt">High = read from a signed transaction, a contract creation, a Transfer log or a balance call. Medium = an inference from High facts or a press statement. Low = a hypothesis. The files: <code>attacker_addresses.csv</code> (4 addresses), <code>hops.csv</code> (57 transfers in 46 rows, identical transfers of one transaction folded into one row with a count column; transfers from the attacker addresses, the exploit contract and the funder's 22 Sep recipient, with the receiving side classified as attacker-held, terminal, victim, funder or open lead), <code>drain_txs.csv</code> (14 rows, 10 transactions touching the vesting contract on 13 to 15 Oct, labelled attacker, other actor, ordinary release or inbound deposit).</p>
+<p class="txt">Terminal rule: routers, pools and a block builder end the trace. A funding wallet is listed as an attacker funder only when it both funded the attacker wallet before the drain and received funds back from it.</p>
+<div class="div" style="margin-top:40px"><span>A</span><i></i><b></b><span>A</span></div>
+<p class="txt" style="color:var(--mut)">Phil Grushyn &middot; on-chain data, public Ethereum &middot; all times UTC &middot; FORENSICS / uncx-vesting-v2 / rev 19 Oct 2026</p>
+</div></div></body></html>

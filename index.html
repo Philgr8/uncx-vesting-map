@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>UNCX Vesting V2: traced transfers by wallet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+/* layout: blueprint frame, prompt bar on top, lanes (chains) stacked, hops as columns left to right, detail drawer on the right */
+:root{
+  --bg:#0a0a0a; --panel:#111111; --rule:#2a2a2a; --rule2:#3d3d3d;
+  --ink:#d0d0d0; --dim:#8c8c8c; --faint:#5e5e5e; --hi:#f5f5f5; --inv:#0a0a0a;
+  --mono:'IBM Plex Mono',ui-monospace,monospace; --disp:'Martian Mono','IBM Plex Mono',monospace; --sans:'IBM Plex Sans',system-ui,sans-serif;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){
+  --bg:#ffffff; --panel:#f3f3f3; --rule:#dcdcdc;
+  --rule2:#8f8f8f; --ink:#1c1c1c; --dim:#555555;
+  --faint:#9a9a9a; --hi:#000000; --inv:#ffffff; color-scheme:light}}
+:root[data-theme="light"]{
+  --bg:#ffffff; --panel:#f3f3f3; --rule:#dcdcdc; --rule2:#8f8f8f;
+  --ink:#1c1c1c; --dim:#555555; --faint:#9a9a9a; --hi:#000000; --inv:#ffffff; color-scheme:light}
+:root[data-theme="dark"]{
+  --bg:#0a0a0a; --panel:#111111; --rule:#2a2a2a; --rule2:#3d3d3d;
+  --ink:#d0d0d0; --dim:#8c8c8c; --faint:#5e5e5e; --hi:#f5f5f5; --inv:#0a0a0a; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font:13px/1.45 var(--mono);margin:0}
+.wrap{height:100%;box-sizing:border-box;padding:12px 16px;display:flex;flex-direction:column;gap:10px}
+.bar{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;color:var(--dim);font-size:12px}
+.bar b{color:var(--ink);font-weight:500}
+.bar .r{margin-left:auto}
+.head{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 20px}
+h1{font:700 19px/1.2 var(--disp);color:var(--hi);margin:0;letter-spacing:-.01em;text-wrap:balance;flex:1 1 420px;min-width:0}
+h1 .eb{display:inline-block;font:500 11px var(--mono);letter-spacing:.16em;color:var(--dim);margin-bottom:6px}
+.snap{color:var(--dim);font-size:12px;flex:1 1 300px;min-width:0}
+.snap b{color:var(--ink);font-weight:500}
+.tools{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+button,input{font:inherit;font-size:12px;color:var(--ink);background:var(--bg);border:1px solid var(--rule2);padding:5px 10px;border-radius:0}
+button{cursor:pointer}
+button:hover{border-color:var(--ink)}
+button:focus-visible,input:focus-visible,a:focus-visible,summary:focus-visible,.map:focus-visible{outline:2px solid var(--hi);outline-offset:1px}
+button[aria-pressed="true"]{background:var(--hi);color:var(--inv);border-color:var(--hi)}
+input{width:190px;max-width:100%}
+input::placeholder{color:var(--faint)}
+.stage{flex:1;min-height:420px;display:flex;gap:0;border:1px solid var(--rule2);position:relative;min-width:0}
+.map{flex:1;min-width:0;position:relative;overflow:hidden;cursor:grab;touch-action:none}
+.map.drag{cursor:grabbing}
+svg{display:block;width:100%;height:100%}
+svg.lod .elabel:not(.on){display:none}
+.legend{display:flex;flex-wrap:wrap;gap:6px 20px;align-items:center;color:var(--dim);font-size:12px}
+.legend span{display:inline-flex;align-items:center;gap:8px}
+.ls{width:28px;height:0;border-top:1.5px solid var(--ink)}
+.ls.m{border-top-style:dashed}.ls.l{border-top:2px dotted var(--ink)}
+.sw{width:22px;height:12px;border:1px solid var(--ink)}
+.sw.held{background:var(--hi);border-color:var(--hi)}.sw.src{border-style:dashed}
+.drawer{width:340px;flex-shrink:0;border-left:1px solid var(--rule2);background:var(--bg);padding:14px 16px;overflow:auto;box-sizing:border-box}
+.drawer h2{font:600 12px var(--mono);color:var(--hi);margin:0 0 4px}
+.drawer .addr{font:700 14px var(--disp);color:var(--hi);word-break:break-all;margin:6px 0 2px}
+.drawer p{font:13.5px/1.5 var(--sans);color:var(--dim);margin:8px 0}
+.drawer a{color:var(--hi);text-underline-offset:2px}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--rule);font-variant-numeric:tabular-nums}
+.kv>span:first-child{color:var(--dim);flex-shrink:0}
+.kv>span:last-child{text-align:right;min-width:0;overflow-wrap:anywhere}
+.tag{display:inline-block;background:var(--hi);color:var(--inv);padding:1px 6px;font-size:11px;letter-spacing:.08em}
+.sec{font:500 11px var(--mono);letter-spacing:.14em;color:var(--dim);margin:14px 0 4px}
+.ed{padding:6px 0;border-bottom:1px solid var(--rule);font-size:12px;font-variant-numeric:tabular-nums}
+.ed summary{cursor:pointer;list-style:none}
+.ed summary::-webkit-details-marker{display:none}
+.ed summary::before{content:"+ ";color:var(--dim)}
+.ed[open] summary::before{content:"- "}
+.ed .t{color:var(--dim)}
+.ed .tx{display:block;margin:3px 0 0 12px;color:var(--dim);overflow-wrap:anywhere;font-size:11px}
+.jump{background:none;border:0;padding:0;color:var(--hi);text-decoration:underline;text-underline-offset:2px;font:inherit;cursor:pointer}
+.foot{display:flex;flex-wrap:wrap;gap:6px 18px;color:var(--faint);font-size:12px}
+.foot .r{margin-left:auto}
+.hint{position:absolute;left:10px;bottom:8px;color:var(--faint);font-size:12px;pointer-events:none;background:var(--bg);padding:0 4px}
+@media (max-width:760px){.wrap{padding:10px 12px;height:auto;min-height:100%}.stage{flex-direction:column}.drawer{width:auto;border-left:0;border-top:1px solid var(--rule2);max-height:320px}.map{min-height:380px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head>
+<body>
+<div class="wrap">
+  <div class="bar"><span><b>fish</b> &mdash; ~/cases/2026-10-14-uncx-vesting-v2 &middot; <b>uncx</b></span><span class="r">sheet map &middot; rev 1 &middot; 19 Oct 2026</span></div>
+  <div class="head">
+    <h1><span class="eb">UNCX VESTING V2 &middot; TRACED TRANSFERS BY WALLET</span><br>Ethereum drain, 14 Oct 2026</h1>
+    <div class="snap" id="snap"></div>
+    <div class="tools">
+      <button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">&minus;</button><button id="fit">fit</button>
+      <input id="q" type="search" placeholder="find address or tx (prefix)" aria-label="Find address or transaction by prefix">
+      <button id="th" title="Switch theme">theme: auto</button>
+    </div>
+  </div>
+  <div class="legend">
+    <span style="color:var(--hi)">link confidence</span>
+    <span><i class="ls"></i>High</span><span><i class="ls m"></i>Medium</span><span><i class="ls l"></i>Low</span>
+    <span><i class="sw held"></i>held</span><span><i class="sw src"></i>source or unattributed</span>
+    <span>line weight = amount within its asset &middot; times UTC</span>
+  </div>
+  <div class="stage">
+    <div class="map" id="map" tabindex="0" aria-label="Transfer map. Arrow keys pan, plus and minus zoom, 0 fits."><svg id="svg" role="group" aria-label="Transfer map by wallet"><defs><pattern id="gr" width="8" height="8" patternUnits="userSpaceOnUse"><line x1="0" y1="0" x2="8" y2="0" stroke="var(--ink)" stroke-opacity=".035"/></pattern></defs><g id="vp"></g></svg><div class="hint">drag to pan &middot; wheel to zoom &middot; click a box</div></div>
+    <aside class="drawer" id="dr" aria-live="polite"></aside>
+  </div>
+  <div class="foot"><span>Phil Grushyn &middot; on-chain data 14&ndash;18 Oct 2026 &middot; all times UTC</span><span class="r">every edge is a transaction read on a public explorer &middot; click a box for amounts, times and hashes</span></div>
+</div>
+<script type="application/json" id="data">{"lanes":[{"id":"services","label":"# services"},{"id":"ethereum","label":"# ethereum"}],"nodes":[{"a":"0xa98f06312b7614523d0f5e725e15fd20fb1b99f5","l":"ethereum","c":0,"r":"UNCX Smart Token Vesting contract (the drained contract)","cf":"H"},{"a":"0xf6d072254eb8a9b06e0ba21221b498332c1bc35e","l":"ethereum","c":1,"r":"exploit_contract","cf":"H"},{"a":"0x6d2afff4fc6ff46564467762c4aa35812680d606","l":"ethereum","c":0,"r":"funder (attacker, operator unknown)","cf":"H","h":{"amt":"7.46","raw":"7.46","asset":"ETH","fz":false,"t":"18 Oct 17:58"},"src":1},{"a":"0x78c9b11853e4f183a34c63ffd1924d2319a2f5b3","l":"ethereum","c":2,"r":"attacker_eoa","cf":"H","h":{"amt":"20.24","raw":"20.24","asset":"ETH","fz":false,"t":"18 Oct 18:14"}},{"a":"0x6cebdf095172b355121b93962017975c4601f26c","l":"ethereum","c":1,"r":"attacker_deployed_contract","cf":"H"},{"a":"LI.FI Diamond","l":"services","c":3,"s":"swap router, trace ends here (0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae)"},{"a":"Uniswap V2 pool","l":"services","c":3,"s":"swap pool, trace ends here (0x2a6c340bcbb0a79d3deecd3bc5cbc2605ea9259f)"},{"a":"Unnamed terminal contract","l":"services","c":3,"s":"swap pool, trace ends here (0x52b335fd4d229c4b4ffa6190526e4b5fb8e3fb09)"},{"a":"Uniswap V3 pool","l":"services","c":3,"s":"swap pool, trace ends here (0x4b2c930f88a87d1bffac291b6a7e01c9f13dd03e)"},{"a":"Quasar Builder","l":"services","c":2,"s":"block builder, 0.01 ETH tip; trace ends here (0x396343362be2a4da1ce0c1c210945346fb82aa49)"},{"a":"Uniswap v4 PoolManager","l":"services","c":3,"s":"swap pool manager, trace ends here (0x000000000004444c5dc75cb358380d2e3de08a90)"},{"a":"Jam pair","l":"services","c":3,"s":"swap pair, trace ends here (0xddd23787a6b80a794d952f5fb036d0b31a8e6aff)"},{"a":"0xaa9f5b46bf43d08a6242a0b7033983b9b6c2560e","l":"ethereum","c":1,"r":"open lead (fresh wallet, link to the attacker not established)","cf":"L"},{"a":"0x634aff3951dab537cc63a4e9d8a36d3028ce819d","l":"ethereum","c":2,"r":"open lead (fresh wallet, link to the attacker not established)","cf":"L"},{"a":"0x7a6d8b5b5cf3773cb518271e24aee626d9f6ff91","l":"ethereum","c":2,"r":"open lead (fresh wallet, link to the attacker not established)","cf":"L"}],"rows":[[0,1,"2026-10-14T15:49:59Z","57344850.920662","EDGEN","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",0,"net of what the exploit returned inside the same transaction"],[0,1,"2026-10-14T15:49:59Z","65826.0","LO0P","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",0,"net of what the exploit returned inside the same transaction"],[0,1,"2026-10-14T15:49:59Z","115945.629884539","PAAL","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",0,"net of what the exploit returned inside the same transaction"],[0,1,"2026-10-14T15:49:59Z","42200.53267672785","PEPECOIN","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",0,"net of what the exploit returned inside the same transaction"],[0,1,"2026-10-14T15:49:59Z","9131678.044554349","ZC","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",0,"net of what the exploit returned inside the same transaction"],[2,3,"2026-10-14T14:47:35Z","0.1","ETH","0x52fe1a5aa857a3e6f6f0c12f559019da382c294238601b967a74b03c01c5b93b","H","ethereum",4,"funding of the attacker EOA before the drain"],[2,3,"2026-10-14T14:56:59Z","0.9","ETH","0x351b5d9728c51ffbefd951b3536ab9c61e6e0de9dfa738830d560eb82fb6992e","H","ethereum",4,"funding of the attacker EOA before the drain"],[2,3,"2026-10-14T15:15:35Z","2.5","ETH","0x56db74daaa13475dbb3360c86bf150ad2430556500cd803e47590f3b32b75e8b","H","ethereum",4,"funding of the attacker EOA before the drain"],[3,2,"2026-10-14T17:09:35Z","3.5","ETH","0xa32b5eefca3e3dc8891f9e07fcd585c5ce1762f5d67035fc3e61acaa818f92bd","H","ethereum",4],[3,4,"2026-10-14T15:49:59Z","0.8","ETH","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",6],[3,5,"2026-10-15T07:35:11Z","9055847.637887683","ZC","0x13a26824dd3f1135b35852333922f4573e0a8c2542a3d6884655471283a490fc","H","ethereum",3],[3,6,"2026-10-14T17:01:11Z","113657.766933968","PAAL","0x4ac0a349988c0e87a7d4d8f5fe94ae4886b165b56e931b6f485c57e2db8bcb4c","H","ethereum",3],[3,7,"2026-10-14T16:58:59Z","65372.21705915999","LO0P","0x35672ee02483b580acc443657ec6f5326e0fcea35912d6042335ed8f70010d04","H","ethereum",3],[3,8,"2026-10-14T16:56:47Z","55601598.708417974","EDGEN","0x60becfc7e652d79182402bc3a8ce43ad433b06b5c401d239a4b10b97bb4a7221","H","ethereum",3],[3,5,"2026-10-14T16:44:35Z","40155.28428566116","PEPECOIN","0xf758582096ed80fbd4b80bc3dbd44e3edabdfd116b15ad9d16af459e38b09be5","H","ethereum",3],[4,1,"2026-10-14T15:49:59Z","0.8","ETH","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",6],[1,3,"2026-10-14T16:41:11Z","0.29","ETH","0x1527757f77288fafc68ab8f2d20e7061ee9941fe8214e188d6810882661fbc32","H","ethereum",2],[1,9,"2026-10-14T15:49:59Z","0.01","ETH","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",5],[1,0,"2026-10-14T15:49:59Z","0.05","ETH","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"paid into the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","0.05","ETH","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"paid into the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","0.05","ETH","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"paid into the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","0.05","ETH","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"paid into the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","0.05","ETH","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"paid into the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","0.05","ETH","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"paid into the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","0.05","ETH","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"paid into the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","0.05","ETH","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"paid into the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","0.05","ETH","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"paid into the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","0.05","ETH","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"paid into the vesting contract inside the first drain transaction"],[1,3,"2026-10-15T07:28:35Z","9055847.637887683","ZC","0x8eab147f6e0f34e807c584d69873b2a2f7b4791b691f9a60c9d1ffd347eafcb0","H","ethereum",2],[1,3,"2026-10-15T07:27:11Z","0.0","EDGEN","0xe806726d883cef3dac91fe782ea1bfe8f451f08c40d3990fee8b4a42443c3711","H","ethereum",2],[1,3,"2026-10-14T16:40:47Z","113657.766933968","PAAL","0x9574ecae738d884840273ea9a70f2498aa236b25c9434667b3ca15a0e0d5c7a4","H","ethereum",2],[1,3,"2026-10-14T16:40:23Z","65372.21705915999","LO0P","0xa7eace362346498853d39c1cd0d75e39bcd0c3d3375ea94d681970b32d8dc8da","H","ethereum",2],[1,3,"2026-10-14T16:39:59Z","40155.28428566116","PEPECOIN","0x7b0f772b25e262075f8422f4386937114d19d4b7f316c92db406277ff56dd6bc","H","ethereum",2],[1,3,"2026-10-14T16:39:35Z","0.0","EDGEN","0xcf762a16fe042fd39f6ff34831e8471c63089529f308ef4903ea47000d1cfc81","H","ethereum",2],[1,3,"2026-10-14T16:38:11Z","55601598.708417974","EDGEN","0x8a34be02396c2ba622e6005ff23ec3c0ba6f528dd4dab7a095ac2f27b31e5d54","H","ethereum",2],[1,6,"2026-10-14T15:49:59Z","496190.551240291","PAAL","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",3],[1,0,"2026-10-14T15:49:59Z","304894.532620226","PAAL","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","188540.54771714","PAAL","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","493928.383308136","PAAL","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","772.970865896","PAAL","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,10,"2026-10-14T15:49:59Z","280857.9550664723","LO0P","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",3],[1,0,"2026-10-14T15:49:59Z","173098.26618084","LO0P","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","107040.43012563227","LO0P","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","280418.76","LO0P","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","438.84","LO0P","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,11,"2026-10-14T15:49:59Z","533036.2828710946","PEPECOIN","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",3],[1,0,"2026-10-14T15:49:59Z","191393.86371251388","PEPECOIN","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","212447.40116829157","PEPECOIN","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","254936.88140194988","PEPECOIN","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,10,"2026-10-14T15:49:59Z","47059196.74409627","ZC","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",3],[1,0,"2026-10-14T15:49:59Z","28925970.406666666","ZC","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","18013033.004096273","ZC","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","46860000.0","ZC","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","73333.33333333333","ZC","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,8,"2026-10-14T15:49:59Z","133087303.42974113","EDGEN","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",3],[1,0,"2026-10-14T15:49:59Z","81511117.99564743","EDGEN","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","81511117.99564743","EDGEN","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","49725755.69547895","EDGEN","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","131319708.60831605","EDGEN","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","131319708.60831605","EDGEN","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[1,0,"2026-10-14T15:49:59Z","57344.85092066203","EDGEN","0x352065378c4a41b77e5b6a1e5b5616cd2886c3e1a2c87ed3db8e5ddddc23823d","H","ethereum",1,"returned to the vesting contract inside the first drain transaction"],[2,12,"2026-09-22T13:55:35Z","2.5","ETH","0xbc5c4a847daa2ce85fa1ad9ebd793c22bf58a0707f735eb8521724c51a0512f8","H","ethereum",6],[12,13,"2026-09-22T14:26:23Z","0.01","ETH","0x8a36dbf6ddd26c84e1ed76cdef2750f8aa5c51f81dd013fb00b0c650149cd971","H","ethereum",6],[12,14,"2026-09-22T14:28:11Z","2","ETH","0xfe2298158f6120c66a462753d09eb58d8d9c134fea90775d58a9839596cb1c8d","H","ethereum",6],[13,12,"2026-09-22T16:21:59Z","0.00835","ETH","0x4bcb9bd6e2f96fc78f9d3d0f781aed629b77721d9c52754aa43f4efa1ac2f027","H","ethereum",6]],"groups":[],"snap":{"bal":"18 Oct 2026 17:58-18:14 UTC","balt":"18 Oct 2026 17:58-18:14 UTC","tr":"15 Oct 2026 07:35 UTC"}}</script>
+<script>
+(function(){
+"use strict";
+const D=JSON.parse(document.getElementById("data").textContent);
+const SNAP=D.snap;
+const LEG=["DRAIN","ROUNDTRIP","TO-EOA","SWAP","FUND","BUILDER","ETH"];
+const RAILOUT=99;
+document.getElementById("snap").innerHTML="balances read <b>"+SNAP.bal+"</b> &middot; transfers to <b>"+SNAP.tr+"</b>";
+
+/* ---------- model ---------- */
+const NODES=D.nodes, ROWS=D.rows, GROUPS=D.groups;
+const nodeOf=new Map();            // raw index -> node
+const gOf=new Map();               // raw index -> group (member)
+NODES.forEach((n,i)=>{n.i=i;n.id="n"+i;nodeOf.set(i,n);n.svc=("s" in n);n.kind=n.svc?"svc":(n.src?"src":"w");});
+GROUPS.forEach((g,gi)=>{g.id="g"+gi;g.gi=gi;g.open=false;g.m.forEach(m=>gOf.set(m,g));});
+const lanesAll=D.lanes;
+function chainOfLane(l){return l}
+const EXPL={ethereum:{a:"https://etherscan.io/address/",t:"https://etherscan.io/tx/"},
+ tron:{a:"https://tronscan.org/#/address/",t:"https://tronscan.org/#/transaction/"},
+ bitcoin:{a:"https://mempool.space/address/",t:"https://mempool.space/tx/"},
+ solana:{a:"https://solscan.io/account/",t:"https://solscan.io/tx/"},
+ polygon:{a:"https://polygonscan.com/address/",t:"https://polygonscan.com/tx/"},
+ bsc:{a:"https://bscscan.com/address/",t:"https://bscscan.com/tx/"}};
+const FA={ethereum:"etherscan",tron:"tronscan",bitcoin:"mempool.space",solana:"solscan",polygon:"polygonscan",bsc:"bscscan"};
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function short(a){return a.slice(0,8)+"…"+a.slice(-4)}
+function fmt(v){
+  if(v>=1e6)return (v/1e6).toFixed(2).replace(/\.?0+$/,"")+"M";
+  if(v>=1000)return v.toLocaleString("en-US",{maximumFractionDigits:2});
+  if(v>=1)return v.toLocaleString("en-US",{maximumFractionDigits:2});
+  return v.toLocaleString("en-US",{maximumFractionDigits:6});
+}
+function fmtFull(v){return v.toLocaleString("en-US",{maximumFractionDigits:8})}
+function md(t){return t.slice(5,7)+"/"+t.slice(8,10)+" "+t.slice(11,16)}
+function txLink(chain,h){
+  const e=EXPL[chain];
+  return e?'<a href="'+e.t+esc(h)+'" target="_blank" rel="noopener">'+esc(h)+'</a>':esc(h);
+}
+function addrLink(n){
+  if(n.svc)return "";
+  const e=EXPL[n.l];
+  return e?'<a href="'+e.a+esc(n.a)+'" target="_blank" rel="noopener">open on '+FA[n.l]+'</a>':"";
+}
+function heldText(h){return (h.fz?"frozen by Tether, ":"held, ")+h.raw+" "+h.asset+", read "+h.t.replace(/^(\d+ \w+) /,"$1 2026 ")+" UTC"}
+function heldSub(h){return (h.fz?"FROZEN ":"HELD ")+h.amt+" "+h.asset+" · "+h.t+" UTC"}
+const sumH=(a,k)=>a.reduce((s,h)=>s+(k(h)||0),0);
+
+/* ---------- visible graph for the current expand state ---------- */
+let V=null; // {nodes:[], edges:[], byId:Map}
+function visId(i){const g=gOf.get(i);return g&&!g.open?g.id:"n"+i}
+function build(){
+  const nodes=[];const byId=new Map();
+  NODES.forEach(n=>{const g=gOf.get(n.i);if(g&&!g.open)return;nodes.push(n);byId.set(n.id,n)});
+  GROUPS.forEach(g=>{
+    if(g.open)return;
+    const first=NODES[g.m[0]];
+    const gn={id:g.id,group:g,kind:"grp",l:g.ch,c:first.c,i:-1,h:g.h?{fz:g.fz}:null};
+    nodes.push(gn);byId.set(g.id,gn);
+  });
+  const em=new Map();
+  ROWS.forEach((r,ri)=>{
+    const f=visId(r[0]),t=visId(r[1]);const k=f+">"+t;
+    let e=em.get(k);
+    if(!e){e={f,t,rows:[],sums:{},conf:"H",t0:r[2],t1:r[2],chains:new Set()};em.set(k,e)}
+    e.rows.push(ri);e.sums[r[4]]=(e.sums[r[4]]||0)+parseFloat(r[3]);
+    if(r[6]!=="H")e.conf=r[6]==="L"?"L":(e.conf==="L"?"L":"M");
+    if(r[2]<e.t0)e.t0=r[2];if(r[2]>e.t1)e.t1=r[2];
+    e.chains.add(r[7]);
+  });
+  const edges=[...em.values()];
+  edges.forEach(e=>{
+    const as=Object.keys(e.sums).sort((a,b)=>e.sums[b]-e.sums[a]);
+    e.asset=as[0];e.amt=e.sums[as[0]];e.more=as.length-1;
+  });
+  // weight: percentile of amount inside its asset class
+  const cls=a=>/^(USDT|USDC|USDC\.e|DAI|USDS|USDT0)$/.test(a)?"usd":a;
+  const byc=new Map();edges.forEach(e=>{const c=cls(e.asset);(byc.get(c)||byc.set(c,[]).get(c)).push(e)});
+  byc.forEach(list=>{list.sort((a,b)=>a.amt-b.amt);list.forEach((e,i)=>{e.w=1+3.5*(list.length>1?i/(list.length-1):0.5)})});
+  const sv=n=>n.svc?n.a:"";
+  edges.forEach(e=>{
+    const a=byId.get(e.f),b=byId.get(e.t);
+    e.rail=a.svc?a.a:(b.svc?b.a:"");
+    e.railOut=e.rows.every(ri=>ROWS[ri][8]===RAILOUT);
+  });
+  V={nodes,edges,byId};
+}
+
+/* ---------- layout ---------- */
+const W=240,H=50,GAP=230,SG=150,RH=64,LH=46,X0=110,R=24; /* R = rows per sub-column; a lane cell with more wallets wraps into sub-columns (uncalibrated) */
+let LAYOUT=null;
+function layout(){
+  const lanes=lanesAll.filter(l=>V.nodes.some(n=>n.l===l.id));
+  const cells=new Map(); // lane|col -> nodes
+  V.nodes.forEach(n=>{const k=n.l+"|"+n.c;(cells.get(k)||cells.set(k,[]).get(k)).push(n)});
+  let y=20;const laneY={},lanesOut=[];
+  lanes.forEach(l=>{
+    let rows=1;cells.forEach((v,k)=>{if(k.startsWith(l.id+"|"))rows=Math.max(rows,Math.min(R,v.length))});
+    laneY[l.id]=y+LH;lanesOut.push({id:l.id,label:l.label,y:y,h:LH+rows*RH+16});y+=LH+rows*RH+16;
+  });
+  const maxc=V.nodes.reduce((m,n)=>Math.max(m,n.c),0);
+  const adjIn=new Map(),adjOut=new Map();
+  V.nodes.forEach(n=>{adjIn.set(n.id,[]);adjOut.set(n.id,[])});
+  V.edges.forEach(e=>{adjOut.get(e.f).push(e.t);adjIn.get(e.t).push(e.f)});
+  // initial order: lane, col, time of first edge
+  const first=new Map();
+  V.edges.forEach(e=>{[e.f,e.t].forEach(id=>{if(!first.has(id)||e.t0<first.get(id))first.set(id,e.t0)})});
+  const ord=new Map(); // id -> y centre
+  function place(list,l){list.forEach((n,i)=>{n.row=i%R;n.sub=Math.floor(i/R);n.y=laneY[l]+n.row*RH;ord.set(n.id,n.y+n.sub*0.01)})}
+  cells.forEach((list,k)=>{list.sort((a,b)=>(first.get(a.id)||"").localeCompare(first.get(b.id)||"")||a.id.localeCompare(b.id));place(list,k.split("|")[0])});
+  function sweep(dir){
+    const cs=[];for(let c=0;c<=maxc;c++)cs.push(c);if(dir<0)cs.reverse();
+    cs.forEach(c=>{
+      lanes.forEach(l=>{
+        const list=cells.get(l.id+"|"+c);if(!list)return;
+        const key=new Map();
+        list.forEach(n=>{
+          const nb=(dir>0?adjIn:adjOut).get(n.id).concat([]);
+          const ys=nb.map(id=>ord.get(id)).filter(v=>v!==undefined);
+          key.set(n.id,ys.length?ys.reduce((a,b)=>a+b,0)/ys.length:ord.get(n.id));
+        });
+        list.sort((a,b)=>key.get(a.id)-key.get(b.id)||a.id.localeCompare(b.id));
+        place(list,l.id);
+      });
+    });
+  }
+  sweep(1);sweep(-1);sweep(1);sweep(-1);sweep(1);
+  const nsub=[];for(let c=0;c<=maxc;c++)nsub.push(1);
+  cells.forEach((v,k)=>{const c=+k.split("|")[1];nsub[c]=Math.max(nsub[c],Math.ceil(v.length/R))});
+  const colX=[];let cx=X0;for(let c=0;c<=maxc;c++){colX.push(cx);cx+=nsub[c]*(W+SG)-SG+GAP}
+  V.nodes.forEach(n=>{n.x=colX[n.c]+n.sub*(W+SG)});
+  LAYOUT={lanes:lanesOut,TOTW:cx-GAP+20,TOTH:y+10,maxc,colX};
+}
+
+/* ---------- drawing ---------- */
+const NS="http://www.w3.org/2000/svg",vp=document.getElementById("vp"),svg=document.getElementById("svg"),map=document.getElementById("map");
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);(p||vp).appendChild(e);return e;}
+let sel=null; // selected visible node id
+function nodeTitle(n){return n.kind==="grp"?n.group.m.length+" × "+fmt(n.group.amt)+" "+n.group.asset:(n.svc?n.a:short(n.a))}
+function nodeSub(n){
+  if(n.kind==="grp"){return (n.h?(n.h.fz?"FROZEN "+NODES[n.group.m[0]].h.t+" UTC":"HELD"):"leaf wallets")+" · click to expand"}
+  if(n.h)return heldSub(n.h);
+  if(n.svc)return n.s;
+  const rin={},rout={};
+  ROWS.forEach(r=>{});
+  return n._sub||"";
+}
+function prepSubs(){
+  const inn=new Map(),out=new Map();
+  ROWS.forEach(r=>{
+    const a=NODES[r[0]],b=NODES[r[1]],amt=parseFloat(r[3]);
+    (inn.get(b.i)||inn.set(b.i,{}).get(b.i))[r[4]]=((inn.get(b.i)||{})[r[4]]||0)+amt;
+    (out.get(a.i)||out.set(a.i,{}).get(a.i))[r[4]]=((out.get(a.i)||{})[r[4]]||0)+amt;
+  });
+  NODES.forEach(n=>{
+    n.rin=inn.get(n.i)||{};n.rout=out.get(n.i)||{};
+    const top=o=>{const k=Object.keys(o).sort((a,b)=>o[b]-o[a]);return k.length?fmt(o[k[0]])+" "+k[0]+(k.length>1?" +"+(k.length-1):""):""};
+    n._sub=n.src?(Object.keys(n.rout).length?"source · out "+top(n.rout):"source · no edges traced"):"in "+top(n.rin);
+  });
+}
+const gE=[],gN=[];
+function labelFor(e){
+  const a=V.byId.get(e.f),b=V.byId.get(e.t);
+  const n=e.rows.length;
+  let l1=(e.rail?e.rail+" · ":"")+fmt(e.amt)+" "+e.asset+(e.more?" +"+e.more:"")+(n>1?" ×"+n:"");
+  let l2=(e.railOut?"~":"")+md(e.t0)+(e.t1!==e.t0?" – "+md(e.t1):"")+" UTC "+e.conf;
+  return [l1,l2];
+}
+function bez(p0,p1,p2,p3,t){const u=1-t;return u*u*u*p0+3*u*u*t*p1+3*u*t*t*p2+t*t*t*p3}
+let eG,nG,lG;
+function draw(){
+  while(vp.firstChild)vp.removeChild(vp.firstChild);
+  const {lanes,TOTW,TOTH}=LAYOUT;
+  el("rect",{x:0,y:0,width:TOTW,height:TOTH,fill:"url(#gr)"});
+  lanes.forEach(l=>{
+    el("line",{x1:0,y1:l.y,x2:TOTW,y2:l.y,stroke:"var(--rule2)","stroke-width":1});
+    el("text",{x:12,y:l.y+26,fill:"var(--hi)","font-family":"var(--mono)","font-size":14,"font-weight":600}).textContent=l.label;
+  });
+  for(let c=0;c<=LAYOUT.maxc;c++)el("text",{x:LAYOUT.colX[c],y:12,fill:"var(--dim)","font-family":"var(--mono)","font-size":11,"letter-spacing":".12em"}).textContent=c===0?"SOURCE":"HOP "+c;
+  eG=el("g",{});nG=el("g",{});lG=el("g",{});
+  // rank per target to spread labels along the curve
+  const inRank=new Map(),inCnt=new Map();
+  V.edges.forEach(e=>inCnt.set(e.t,(inCnt.get(e.t)||0)+1));
+  V.edges.slice().sort((a,b)=>V.byId.get(a.f).y-V.byId.get(b.f).y).forEach(e=>{const r=inRank.get(e.t)||0;e.rank=r;inRank.set(e.t,r+1)});
+  V.edges.forEach(e=>{
+    const a=V.byId.get(e.f),b=V.byId.get(e.t);
+    const x1=a.x+W,y1=a.y+H/2,x2=b.x-6,y2=b.y+H/2,mx=(x1+x2)/2;
+    const w=e.w;
+    e.el=el("path",{d:"M"+x1+","+y1+" C"+mx+","+y1+" "+mx+","+y2+" "+x2+","+y2,fill:"none",stroke:"var(--ink)","stroke-opacity":.75,
+      "stroke-width":e.conf==="L"?Math.max(w,2):w,"stroke-dasharray":e.conf==="M"?"7 4":e.conf==="L"?"1.5 4":"none","stroke-linecap":e.conf==="L"?"round":"butt"},eG);
+    el("path",{d:"M"+(x2-1)+","+(y2-4)+" L"+(x2+6)+","+y2+" L"+(x2-1)+","+(y2+4)+"Z",fill:"var(--ink)"},eG);
+    const [l1,l2]=labelFor(e);
+    const n=inCnt.get(e.t),t=n>1?0.52+0.32*(e.rank/(n-1)):0.7;
+    const cx=bez(x1,mx,mx,x2,t),cy=bez(y1,y1,y2,y2,t);
+    const wd=Math.max(l1.length,l2.length)*6.5+14;
+    const g=el("g",{class:"elabel"},lG);
+    el("rect",{x:cx-wd/2,y:cy-14,width:wd,height:28,fill:"var(--bg)","fill-opacity":.92},g);
+    el("text",{x:cx-wd/2+6,y:cy-2,fill:"var(--hi)","font-family":"var(--mono)","font-size":11},g).textContent=l1;
+    el("text",{x:cx-wd/2+6,y:cy+10,fill:"var(--dim)","font-family":"var(--mono)","font-size":10.5},g).textContent=l2;
+    e.lbl=g;
+  });
+  V.nodes.forEach(n=>{
+    const held=!!n.h;
+    const g=el("g",{tabindex:0,role:"button","aria-label":n.kind==="grp"?nodeTitle(n)+", click to expand":(n.svc?n.a:n.a),style:"cursor:pointer"},nG);
+    if(n.kind==="grp"){
+      el("rect",{x:n.x+6,y:n.y-5,width:W,height:H,fill:"var(--bg)",stroke:"var(--rule2)","stroke-width":1},g);
+      el("rect",{x:n.x+3,y:n.y-2.5,width:W,height:H,fill:"var(--bg)",stroke:"var(--rule2)","stroke-width":1},g);
+    }
+    n.box=el("rect",{x:n.x,y:n.y,width:W,height:H,fill:held?"var(--hi)":"var(--bg)",stroke:held?"var(--hi)":"var(--rule2)","stroke-width":1,"stroke-dasharray":(n.kind==="src"||n.dash)?"4 3":"none"},g);
+    el("text",{x:n.x+12,y:n.y+21,fill:held?"var(--inv)":"var(--hi)","font-family":"var(--disp)","font-size":13,"font-weight":700},g).textContent=nodeTitle(n);
+    el("text",{x:n.x+12,y:n.y+39,fill:held?"var(--inv)":"var(--dim)","font-family":"var(--mono)","font-size":11.5},g).textContent=nodeSub(n);
+    g.addEventListener("click",ev=>{ev.stopPropagation();pick(n)});
+    g.addEventListener("keydown",ev=>{if(ev.key==="Enter"||ev.key===" "){ev.preventDefault();pick(n)}});
+    n.g=g;
+  });
+  applySel();
+}
+function pick(n){
+  if(n.kind==="grp"){n.group.open=true;rebuild();const f=V.byId.get("n"+n.group.m[0]);select(f,true);return}
+  select(n);
+}
+function rebuild(keep){build();layout();draw();apply()}
+function applySel(){
+  const n=sel?V.byId.get(sel):null;
+  V.nodes.forEach(m=>{const on=m===n;m.box.setAttribute("stroke-width",on?2.5:1);m.box.setAttribute("stroke",on?"var(--hi)":(m.h?"var(--hi)":"var(--rule2)"))});
+  V.edges.forEach(e=>{const on=!n||e.f===n.id||e.t===n.id;e.el.setAttribute("stroke-opacity",on?(n?.95:.75):.15);e.lbl.setAttribute("opacity",on?1:.2);e.lbl.classList.toggle("on",!!n&&on)});
+}
+
+/* ---------- pan / zoom ---------- */
+let k=1,tx=0,ty=0;
+function apply(){vp.setAttribute("transform","translate("+tx+","+ty+") scale("+k+")");svg.classList.toggle("lod",k<0.55)}
+function fit(){const r=map.getBoundingClientRect();k=Math.min(r.width/LAYOUT.TOTW,r.height/LAYOUT.TOTH)*0.98;tx=(r.width-LAYOUT.TOTW*k)/2;ty=4;apply();}
+function zoomAt(f,cx,cy){const nk=Math.max(.05,Math.min(4,k*f));tx=cx-(cx-tx)*nk/k;ty=cy-(cy-ty)*nk/k;k=nk;apply();}
+map.addEventListener("wheel",e=>{e.preventDefault();const r=map.getBoundingClientRect();zoomAt(e.deltaY<0?1.12:1/1.12,e.clientX-r.left,e.clientY-r.top)},{passive:false});
+const ptrs=new Map();let drag=null,pinch=null;
+map.addEventListener("pointerdown",e=>{
+  if(e.target.closest("g[role]"))return;
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===1){drag={x:e.clientX,y:e.clientY,tx,ty,moved:false};map.classList.add("drag")}
+  else if(ptrs.size===2){const p=[...ptrs.values()];pinch={d:Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y)};drag=null}
+  try{map.setPointerCapture(e.pointerId)}catch(_){}
+});
+map.addEventListener("pointermove",e=>{
+  if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pinch&&ptrs.size===2){const p=[...ptrs.values()],d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y),r=map.getBoundingClientRect();
+    zoomAt(d/pinch.d,(p[0].x+p[1].x)/2-r.left,(p[0].y+p[1].y)/2-r.top);pinch.d=d;return}
+  if(!drag)return;if(Math.abs(e.clientX-drag.x)+Math.abs(e.clientY-drag.y)>4)drag.moved=true;
+  tx=drag.tx+e.clientX-drag.x;ty=drag.ty+e.clientY-drag.y;apply()});
+function endp(e){ptrs.delete(e.pointerId);if(ptrs.size<2)pinch=null;if(ptrs.size===0){map.classList.remove("drag");setTimeout(()=>{drag=null},0)}}
+map.addEventListener("pointerup",endp);map.addEventListener("pointercancel",endp);
+const mid=()=>{const r=map.getBoundingClientRect();return[r.width/2,r.height/2]};
+document.getElementById("zin").onclick=()=>zoomAt(1.25,...mid());
+document.getElementById("zout").onclick=()=>zoomAt(1/1.25,...mid());
+document.getElementById("fit").onclick=fit;
+map.addEventListener("keydown",e=>{
+  if(e.target!==map)return;
+  const s=60;
+  if(e.key==="ArrowLeft")tx+=s;else if(e.key==="ArrowRight")tx-=s;else if(e.key==="ArrowUp")ty+=s;else if(e.key==="ArrowDown")ty-=s;
+  else if(e.key==="+"||e.key==="=")zoomAt(1.25,...mid());else if(e.key==="-")zoomAt(1/1.25,...mid());else if(e.key==="0")fit();
+  else if(e.key==="Escape")select(null);else return;
+  e.preventDefault();apply();
+});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&sel&&e.target.tagName!=="INPUT")select(null)});
+
+/* ---------- drawer ---------- */
+const dr=document.getElementById("dr");
+function select(n,center){
+  sel=n?n.id:null;applySel();
+  if(center&&n){k=Math.max(k,0.9);const r=map.getBoundingClientRect();tx=r.width/2-(n.x+W/2)*k;ty=r.height/2-(n.y+H/2)*k;apply()}
+  if(!n){overview();return}
+  if(n.kind==="grp"){groupDrawer(n);return}
+  nodeDrawer(n);
+}
+function sumStr(o){const ks=Object.keys(o).sort((a,b)=>o[b]-o[a]);return ks.length?ks.map(a=>fmtFull(o[a])+" "+a).join("<br>"):"none"}
+function edgeBlocks(list,dir){
+  // list: visible edges; dir "from"/"to": other end shown. One <details> per other end with every row.
+  return list.map(e=>{
+    const o=V.byId.get(dir==="from"?e.f:e.t);
+    const lab=o.kind==="grp"?nodeTitle(o):(o.svc?o.a:short(o.a));
+    const rows=e.rows.map(ri=>ROWS[ri]).sort((a,b)=>a[2].localeCompare(b[2]));
+    const sums=Object.keys(e.sums).map(a=>fmtFull(e.sums[a])+" "+a).join(" + ");
+    const dist=e.rows.length>1?" · "+e.rows.length+" tx":"";
+    return '<details class="ed"'+(e.rows.length<=2?" open":"")+'><summary>'+dir+' <button class="jump" data-j="'+o.id+'">'+esc(lab)+'</button><br><span class="t">'+esc(sums)+dist+" · "+md(e.t0)+(e.t1!==e.t0?" – "+md(e.t1):"")+" UTC · "+e.conf+'</span></summary>'+
+      rows.map(r=>{
+        const m=NODES[dir==="from"?r[0]:r[1]];
+        const who=o.kind==="grp"?'<br>'+(m.svc?esc(m.a):'<span class="t">wallet</span> '+esc(m.a)):"";
+        return '<span class="tx">'+(r[8]===RAILOUT?"~":"")+r[2]+" UTC · "+fmtFull(parseFloat(r[3]))+" "+esc(r[4])+" · "+r[6]+who+"<br>tx "+txLink(r[7],r[5])+(r[9]?'<br><span class="t">'+esc(r[9])+"</span>":"")+"</span>";
+      }).join("")+"</details>";
+  }).join("");
+}
+function clearBtn(){const b=document.getElementById("clr");if(b)b.onclick=()=>select(null)}
+function bindJump(){dr.querySelectorAll("button.jump").forEach(b=>b.onclick=()=>{
+  const n=V.byId.get(b.dataset.j);if(n){pick(n);if(n.kind!=="grp"){const m=V.byId.get(b.dataset.j);if(m)select(m,true)}}
+})}
+function nodeDrawer(n){
+  const ins=V.edges.filter(e=>e.t===n.id),outs=V.edges.filter(e=>e.f===n.id);
+  const g=gOf.get(n.i);
+  const lane=(lanesAll.find(l=>l.id===n.l)||{}).label||n.l;
+  const role=n.svc?n.s:(n.src?"source":"hop "+n.c);
+  dr.innerHTML='<h2>'+esc(lane.replace("# ","").toUpperCase())+" · "+esc(role.toUpperCase())+'</h2><div class="addr">'+esc(n.a)+'</div>'+
+    (n.svc?"":'<div>'+addrLink(n)+'</div>')+
+    (n.h?'<div style="margin-top:8px"><span class="tag">'+(n.h.fz?"FROZEN":"HELD")+'</span></div>':"")+
+    '<div style="margin-top:10px">'+
+    (n.r?'<div class="kv"><span>role</span><span>'+esc(n.r)+' · '+(n.cf==="H"?"High":n.cf==="M"?"Medium":"Low")+'</span></div>':"")+
+    '<div class="kv"><span>received</span><span>'+sumStr(n.rin)+'</span></div>'+
+    '<div class="kv"><span>sent</span><span>'+sumStr(n.rout)+'</span></div>'+
+    '<div class="kv"><span>edges in / out</span><span>'+ins.length+' / '+outs.length+'</span></div>'+
+    (n.h?'<div class="kv"><span>state</span><span>'+esc(heldText(n.h))+'</span></div>':"")+'</div>'+
+    (ins.length?'<div class="sec">RECEIVED FROM</div>'+edgeBlocks(ins.sort((a,b)=>a.t0.localeCompare(b.t0)),"from"):"")+
+    (outs.length?'<div class="sec">SENT TO</div>'+edgeBlocks(outs.sort((a,b)=>a.t0.localeCompare(b.t0)),"to"):"")+
+    (g?'<p>This wallet is one of '+g.m.length+' × '+fmt(g.amt)+' '+esc(g.asset)+' leaf wallets of one sender.</p><button id="col" style="margin-right:6px">collapse group</button>':"")+
+    '<button id="clr" style="margin-top:6px">clear selection</button>';
+  clearBtn();
+  const c=document.getElementById("col");if(c)c.onclick=()=>{g.open=false;rebuild();select(V.byId.get(g.id),true)};
+  bindJump();
+}
+function groupDrawer(n){
+  const g=n.group,ins=V.edges.filter(e=>e.t===n.id);
+  const ms=g.m.map(i=>NODES[i]);
+  const hz=g.h?ms[0].h:null;
+  dr.innerHTML='<h2>GROUP · '+g.m.length+' LEAF WALLETS</h2><div class="addr">'+g.m.length+' × '+fmt(g.amt)+' '+esc(g.asset)+'</div>'+
+    (hz?'<div style="margin-top:8px"><span class="tag">'+(hz.fz?"FROZEN":"HELD")+'</span></div>':"")+
+    '<div style="margin-top:10px"><div class="kv"><span>wallets</span><span>'+g.m.length+'</span></div>'+
+    '<div class="kv"><span>each received</span><span>'+fmtFull(g.amt)+' '+esc(g.asset)+'</span></div>'+
+    (hz?'<div class="kv"><span>state</span><span>'+esc(hz.fz?"frozen by Tether, read 12 Oct 2026 "+hz.t+" UTC":"held, read 12 Oct 2026 "+hz.t+" UTC")+'</span></div>':"")+'</div>'+
+    '<div class="sec">RECEIVED FROM</div>'+edgeBlocks(ins,"from")+
+    '<div class="sec">WALLETS</div>'+ms.map(m=>'<div class="ed">'+esc(m.a)+'<br><span class="t">'+addrLink(m).replace("open on ","")+'</span></div>').join("")+
+    '<button id="exp" style="margin-top:8px">expand group</button> <button id="clr" style="margin-top:8px">clear selection</button>';
+  document.getElementById("exp").onclick=()=>pick(n);
+  clearBtn();
+  bindJump();
+}
+function overview(){
+  const wal=NODES.filter(n=>!n.svc),svc=NODES.filter(n=>n.svc);
+  const hs=wal.filter(n=>n.h),fz=hs.filter(n=>n.h.fz),hd=hs.filter(n=>!n.h.fz);
+  const num=s=>parseFloat(s.replace(/,/g,""));
+  const eth=hd.filter(n=>n.h.asset==="ETH"),btc=hd.filter(n=>n.h.asset==="BTC");
+  const fzUsd=sumH(fz,n=>num(n.h.raw));
+  const byL={};wal.forEach(n=>byL[n.l]=(byL[n.l]||0)+1);
+  const ch=lanesAll.filter(l=>l.id!=="services").map(l=>l.id+" "+(byL[l.id]||0)).join(", ");
+  const svcRows={};ROWS.forEach(r=>{[NODES[r[0]],NODES[r[1]]].forEach(n=>{if(n.svc)svcRows[n.a]=(svcRows[n.a]||0)+1})});
+  const tor=ROWS.filter(r=>r[8]===2);
+  const torEth=sumH(tor,r=>parseFloat(r[3]));
+  const srcN=NODES.filter(n=>n.src&&n.rout&&Object.keys(n.rout).length).length;
+  const gw=GROUPS.reduce((s,g)=>s+g.m.length,0);
+  dr.innerHTML='<h2>SUMMARY</h2>'+
+  '<div class="kv"><span>wallets</span><span>'+wal.length+'</span></div>'+
+  '<div class="kv"><span>services (boxes)</span><span>'+svc.length+'</span></div>'+
+  '<div class="kv"><span>transfers (tx rows)</span><span>'+ROWS.length+'</span></div>'+
+  '<div class="kv"><span>edges drawn now</span><span>'+V.edges.length+'</span></div>'+
+  '<div class="kv"><span>sources with outflow</span><span>'+srcN+'</span></div>'+
+  '<div class="kv"><span>grouped leaf wallets</span><span>'+GROUPS.length+' groups, '+gw+' wallets</span></div>'+
+  '<div class="kv"><span>held, ethereum</span><span>'+eth.length+' wallets · '+fmtFull(sumH(eth,n=>num(n.h.raw)))+' ETH<br>read '+SNAP.balt+'</span></div>'+
+  '<div class="sec">SERVICES BY TRANSFERS</div>'+Object.keys(svcRows).sort((a,b)=>svcRows[b]-svcRows[a]).map(a=>'<div class="kv"><span>'+esc(a)+'</span><span>'+svcRows[a]+' tx</span></div>').join("")+
+  '<p>Click any box to isolate its transfers. Line style is the confidence of each link; filled boxes hold a balance at the read time. Columns are hops, the single lane is Ethereum, routers, pools and a block builder (services lane) end the trace. The dashed box is the funder of the signing wallet: it is attacker-held (High; it funded the signing wallet before the drain and got the same 3.5 ETH back), and who operates it is not established. Its dashed box marks the start of the flow, not its confidence. The token amounts of the drain are net of what the exploit returned inside the same transaction.</p>';
+}
+map.addEventListener("click",e=>{if(e.target.closest("g[role]"))return;if(drag&&drag.moved)return;select(null)});
+
+/* ---------- find ---------- */
+document.getElementById("q").addEventListener("input",e=>{
+  const q=e.target.value.trim().toLowerCase();if(!q){select(null);return}
+  let hit=NODES.find(n=>n.a.toLowerCase().startsWith(q))||NODES.find(n=>!n.svc&&q.length>=4&&n.a.toLowerCase().endsWith(q));
+  if(!hit){const r=ROWS.find(r=>r[5].toLowerCase().startsWith(q)||("0x"+r[5].toLowerCase()).startsWith(q));if(r)hit=NODES[r[1]]}
+  if(!hit)return;
+  const g=gOf.get(hit.i);if(g&&!g.open){g.open=true;rebuild()}
+  const n=V.byId.get("n"+hit.i);select(n,true);
+});
+
+/* ---------- theme ---------- */
+const th=document.getElementById("th"),root=document.documentElement;const modes=["auto","dark","light"];let mi=0;
+try{const s=localStorage.getItem("uncx-theme");if(s&&modes.includes(s))mi=modes.indexOf(s)}catch(e){}
+function setTheme(){const m=modes[mi];if(m==="auto")root.removeAttribute("data-theme");else root.setAttribute("data-theme",m);th.textContent="theme: "+m;try{localStorage.setItem("uncx-theme",m)}catch(e){}}
+th.onclick=()=>{mi=(mi+1)%3;setTheme()};setTheme();
+
+/* ---------- start ---------- */
+prepSubs();build();layout();draw();overview();fit();
+addEventListener("resize",fit);
+window.__map={rows:()=>V.edges.reduce((s,e)=>s+e.rows.length,0),edges:()=>V.edges.length,nodes:()=>V.nodes.length,
+  open:o=>{GROUPS.forEach(g=>g.open=o);rebuild()},theme:m=>{mi=modes.indexOf(m);setTheme()},fit:fit,
+  size:()=>[LAYOUT.TOTW,LAYOUT.TOTH],sel:id=>{const n=V.byId.get(id);if(n)select(n,true)},ids:()=>V.nodes.map(n=>n.id),
+  zoom:(kk,x,y)=>{k=kk;tx=x;ty=y;apply()}};
+})();
+</script>
+</body></html>
